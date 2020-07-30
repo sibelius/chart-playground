@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
-import { Flex } from 'rebass';
+import React, { useState, useMemo } from 'react';
+import { Flex, Text } from 'rebass';
 import styled from 'styled-components';
 import { ResponsiveLine } from '@nivo/line';
 import * as d3 from 'd3';
-import { TextField, Button } from '@material-ui/core';
+import { TextField, Button, FormControlLabel, Checkbox } from '@material-ui/core';
 import { Card } from './ui/Card';
-import Autocomplete from '@material-ui/lab/Autocomplete';
+import { Autocomplete } from '@material-ui/lab';
 
 const Center = styled.div`
   display: grid;
@@ -38,43 +38,121 @@ const useNumber = (initialValue) => {
 }
 
 const useForceUpdate = () => {
-  const [, forceUpdate] = useState(0);
+  const [refresh, forceUpdate] = useState(0);
 
   const update = () => {
     forceUpdate(count => count + 1);
   }
 
-  return update;
+  return [update, refresh];
 }
 
 const App = () => {
-  const [lambdaText, setLambdaText, lambda] = useNumber(1);
   const [sizeText, setSizeText, size] = useNumber(100);
   const [xRangeText, setXRangeText, xRange] = useNumber(4);
-  const forceUpdate = useForceUpdate();
-
-  const exponentialData = Float64Array.from({length: size}, d3.randomExponential(lambda));
-
-  const qy = exponentialData.sort(d3.ascending);
-  const qyy = [].slice.call(qy);
-
-  const data = qyy.map((v,i) => {
-    return {
-      x: i * xRange/size,
-      y: v,
-    }
+  const [lineWidthText, setLineWidthText, lineWidth] = useNumber(0);
+  const [forceUpdate, refresh] = useForceUpdate();
+  const [enableArea, setEnableArea] = useState<boolean>(true);
+  const [enablePoints, setEnablePoints] = useState<boolean>(false);
+  const [enableGridX, setEnableGridX] = useState<boolean>(false);
+  const [enableGridY, setEnableGridY] = useState<boolean>(true);
+  const [axisBottomLegend, setAxisBottomLegend] = useState('Time');
+  const [axisLeftLegend, setAxisLeftLegend] = useState('Count');
+  const [distribution, setDistribution] = useState({
+    value: 'Exponential',
+    label: 'Exponential',
   });
 
-  const series = [
+  const [lambdaText, setLambdaText, lambda] = useNumber(1);
+  const [muText, setMuText, mu] = useNumber(0);
+  const [sigmaText, setSigmaText, sigma] = useNumber(1);
+
+  const DISTRIBUTION_OPTIONS = [
     {
-      id: 'data',
-      data,
-    }
+      value: 'Exponential',
+      label: 'Exponential',
+    },
+    {
+      value: 'LogNormal',
+      label: 'LogNormal',
+    },
   ];
 
-  console.log('series', {
-    series,
-  });
+  const fnFromDistribution = () => {
+    switch(distribution.value) {
+      case 'Exponential':
+        return d3.randomExponential;
+      case 'LogNormal':
+        return d3.randomLogNormal;
+      default:
+        return d3.randomExponential;
+    }
+  }
+
+  const getDistributionParams = () => {
+    switch(distribution.value) {
+      case 'Exponential':
+        return [lambda];
+      case 'LogNormal':
+        return [mu, sigma];
+      default:
+        return [lambda];
+    }
+  }
+
+  const renderDistributionParams = () => {
+    if (distribution.value === 'Exponential') {
+      return (
+        <TextField
+          label='lambda'
+          value={lambdaText}
+          onChange={setLambdaText}
+        />
+      )
+    }
+
+    if (distribution.value === 'LogNormal') {
+      return (
+        <>
+          <TextField
+            label='mu'
+            value={muText}
+            onChange={setMuText}
+          />
+          <TextField
+            label='sigma'
+            value={sigmaText}
+            onChange={setSigmaText}
+          />
+        </>
+      )
+    }
+  }
+
+  const qyy = useMemo(() => {
+    const distributionFn = fnFromDistribution();
+    const args = getDistributionParams();
+    const exponentialData = Float64Array.from({length: size}, distributionFn(...args));
+
+    const qy = exponentialData.sort(d3.ascending);
+    return [].slice.call(qy);
+  }, [size, refresh, distribution.value, lambda, mu, sigma]);
+
+  const series = useMemo(() => {
+    const data = qyy.map((v,i) => {
+      return {
+        x: i * xRange/size,
+        y: v,
+      }
+    });
+
+    return [
+      {
+        id: 'data',
+        data,
+      }
+    ];
+  }, [qyy, xRange]);
 
   const margin = {
     top: 50, right: 110, bottom: 50, left: 60
@@ -86,11 +164,6 @@ const App = () => {
 
   const min = Math.min(...qyy);
   const max = Math.max(...qyy);
-
-  console.log({
-    min,
-    max,
-  });
 
   const yScale = {
     type: 'linear',
@@ -105,7 +178,7 @@ const App = () => {
 
   const axisBottom = {
     orient: 'bottom',
-    legend: 'Time',
+    legend: axisBottomLegend,
     legendOffset: 36,
     legendPosition: 'middle',
     tickValues: [0, 1, 2 , 3, 4],
@@ -117,7 +190,7 @@ const App = () => {
     tickPadding: 5,
     tickRotation: 0,
     tickValues: 5,
-    legend: 'count',
+    legend: axisLeftLegend,
     legendOffset: -40,
     legendPosition: 'middle'
   }
@@ -132,7 +205,7 @@ const App = () => {
             xScale={xScale}
             yScale={yScale}
             colors={colors}
-            lineWidth={0}
+            lineWidth={lineWidth}
             axisTop={null}
             axisRight={null}
             axisBottom={axisBottom}
@@ -144,18 +217,29 @@ const App = () => {
             pointLabel="y"
             pointLabelYOffset={-12}
             useMesh={false}
-            enableArea={true}
-            enablePoints={false}
-            enableGridX={false}
-            enableGridY={true}
+            enableArea={enableArea}
+            enablePoints={enablePoints}
+            enableGridX={enableGridX}
+            enableGridY={enableGridY}
           />
         </Flex>
         <Card flexDirection='column'>
-          <TextField
-            label='lambda'
-            value={lambdaText}
-            onChange={setLambdaText}
-            />
+          <Text>Distribution</Text>
+          <Autocomplete
+            options={DISTRIBUTION_OPTIONS}
+            value={distribution}
+            onChange={(event, value) => setDistribution(value)}
+            blurOnSelect={true}
+            disableClearable={true}
+            openOnFocus={true}
+            style={{ width: '100%' }}
+            getOptionLabel={(option) => option.label}
+            getOptionSelected={(option, value) => option?.value === value?.value || option?.value === value}
+            renderInput={(params) => {
+              return <TextField {...params} variant='standard' label={'Distribution'} fullWidth />;
+            }}
+          />
+          {renderDistributionParams()}
           <TextField
             label='size'
             value={sizeText}
@@ -165,6 +249,39 @@ const App = () => {
             label='xRange'
             value={xRangeText}
             onChange={setXRangeText}
+          />
+          <Text mt='10px'>Legend</Text>
+          <TextField
+            label='Axis Bottom'
+            value={axisBottomLegend}
+            onChange={(e) => setAxisBottomLegend(e.target.value)}
+          />
+          <TextField
+            label='Axis Left'
+            value={axisLeftLegend}
+            onChange={(e) => setAxisLeftLegend(e.target.value)}
+          />
+          <Text mt='10px'>Chart</Text>
+          <FormControlLabel
+            control={<Checkbox checked={enableArea} onChange={(e) => setEnableArea(e.target.checked)} name="enableArea" />}
+            label="enableArea"
+          />
+          <FormControlLabel
+            control={<Checkbox checked={enablePoints} onChange={(e) => setEnablePoints(e.target.checked)} name="enableArea" />}
+            label="enablePoints"
+          />
+          <FormControlLabel
+            control={<Checkbox checked={enableGridX} onChange={(e) => setEnableGridX(e.target.checked)} name="enableArea" />}
+            label="gridX"
+          />
+          <FormControlLabel
+            control={<Checkbox checked={enableGridY} onChange={(e) => setEnableGridY(e.target.checked)} name="enableArea" />}
+            label="gridY"
+          />
+          <TextField
+            label='lineWidth'
+            value={lineWidthText}
+            onChange={setLineWidthText}
           />
           <Button onClick={forceUpdate}>
             Refresh
