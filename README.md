@@ -1,22 +1,9 @@
-# UI boilerplate
+# Chart Playground
 
-Basic UI boilerplate to practice CSS
+Generate random charts distributions using d3-random and nivo.rocks
 
-- material ui
-- styled-components
-- styled-system (similar to tailwind but for css in js)
-- rebass
-
-## How to start desiging?
+## How to start?
 
 ```sh
 yarn start
 ```
-
-## How to test responsive in many screens?
-
-Use [Responsively App](https://github.com/manojVivek/responsively-app)
-
-## How to convert SVG files to React Components?
-
-Use [Transform Tools](https://transform.tools/)
